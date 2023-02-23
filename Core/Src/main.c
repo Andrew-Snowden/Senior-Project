@@ -123,7 +123,7 @@ int main(void)
 	  //Simple delay for testing purposes
 	  for (int i = 0; i < 20000; i++);
 
-	  myprint_hex(htim4->Instance->CNT);
+	  myprint_hex(htim4.Instance->CNT);
 
 	  //Set data in usb hid report
 	  report.members.throttle = ++report.members.throttle % 255;
