@@ -27,7 +27,7 @@
 /* USER CODE BEGIN Includes */
 #include "motor.h"
 #include "myprint.h"
-//#include "usb.h"
+
 #include "myusb.h"
 #include "encoder.h"
 /* USER CODE END Includes */
@@ -96,20 +96,23 @@ int main(void)
   MX_GPIO_Init();
   MX_USART3_UART_Init();
   MX_TIM3_Init();
-  MX_ADC1_Init();
+  //MX_ADC1_Init();
   MX_TIM4_Init();
   /* USER CODE BEGIN 2 */
-/*
+
+  //Motor initialization -- Needs timer initialization to be rewritten
+  /*
   Motor_Start();
   Motor_SetDirection(MD_Left);
   Motor_SetSpeed(200);
-*/
+   */
+
   HAL_TIM_Encoder_Start(&htim4, TIM_CHANNEL_ALL);
 
   myprint("Starting USB...\n\r");
   myusb_Initialize();
 
-  RotaryEncoderInit();
+  //RotaryEncoderInit();
 
   /* USER CODE END 2 */
 
@@ -117,19 +120,17 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  int j = 0;
-	  for (int i = 0; i < 20000; i++)
-	  {
-		  j++;
-	  }
+	  //Simple delay for testing purposes
+	  for (int i = 0; i < 20000; i++);
 
-	  //myprint_hex(rotary_position);
+	  myprint_hex(rotary_position);
 
-
+	  //Set data in usb hid report
 	  report.members.throttle = ++report.members.throttle % 255;
 	  report.members.brake = ++report.members.brake % 255;
 	  report.members.steering = -1000;
 
+	  //Motor code -- Needs timer initialization to be rewritten
 	  /*HAL_ADC_Start(&hadc1);
 	  HAL_ADC_PollForConversion(&hadc1, 200);
 	  Motor_SetSpeed(HAL_ADC_GetValue(&hadc1) * 3);*/

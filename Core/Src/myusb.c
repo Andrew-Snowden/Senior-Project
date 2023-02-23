@@ -28,8 +28,11 @@ typedef struct //__attribute__((packed))
 	__IO uint16_t COUNT_RX;
 } BTableLayout;
 volatile BTableLayout *my_btable;
+
 volatile uint16_t buffer[32];
 volatile uint8_t big_buffer[256];
+
+uint8_t address = 0;
 
 union Device{
 	DeviceDescriptor descriptor;
@@ -40,7 +43,6 @@ union Configuration{
 	ConfigurationDescriptor descriptor;
 	uint8_t data[9];
 } configuration;
-uint8_t address = 0;
 
 union Interface{
 	InterfaceDescriptor descriptor;
@@ -116,10 +118,10 @@ void myusb_Initialize(void)
 	DescriptorInitialization();
 
 	//Initialize data in report
-	report.members.brake = 255;
+	report.members.brake = 0;
 	report.members.throttle = 0;
-	report.members.buttons = 0xF0;
-	report.members.steering = 500;
+	report.members.buttons = 0x00;
+	report.members.steering = 0;
 
 	//Map USBz to registers
 	USBz = USB;
@@ -236,6 +238,7 @@ void DescriptorInitialization(void)
 /* -----------FUNCTIONS--------------*/
 /*-----------------------------------*/
 
+//Reads single byte past buffer if num_bytes is odd. Shouldn't result in any issues...
 void ReadEndpoint(uint8_t endpoint, uint8_t num_bytes)
 {
 	if (num_bytes != 0)
@@ -257,6 +260,7 @@ void ReadEndpoint(uint8_t endpoint, uint8_t num_bytes)
 	}
 }
 
+//Reads single byte past data_buffer if num_bytes is odd. Shouldn't result in any issues...
 void WriteEndpoint(uint8_t endpoint, uint16_t* data_buffer, uint8_t num_bytes)
 {
 	//Get offset to endpoint n TX buffer
@@ -408,17 +412,11 @@ void EndpointCallback(void)
 				}
 				else if (USBz->EP0R & USB_EP_CTR_RX) //OUT
 				{
-
 					USBz->EP0R = ((~USB_EP_CTR_RX) & USBz->EP0R) & 0x8F8F;
 
 					uint8_t num_bytes = my_btable[0].COUNT_RX;
-/*					if ((address > 0) && (num_bytes == 0))
-					{
-						USBz->DADDR = address | (1 << 7);	//Set address and enable
-						address = 0;
-					}
 
-*/					//Set RX to Valid
+					//Set RX to Valid
 					USBz->EP0R = (1 << 12) | (USBz->EP0R & 0x9F8F);
 				}
 			}
@@ -440,7 +438,6 @@ void EndpointCallback(void)
 			else //IN
 			{
 				WriteEndpoint(1, report.data, 5);
-				//myprint("EP1 Request!\r\n");
 
 				USBz->EP1R = ((~USB_EP_CTR_TX) & USBz->EP1R) & 0x8F8F;
 			}
@@ -566,13 +563,3 @@ void SetupCallback(void)
 		break;
 	}
 }
-
-
-/*
-uint16_t ep_val = USBz->EP0R;
-myprint("HIGH VAL: ");
-myprint_hex(ep_val >> 8 & 0xFF);
-myprint("\r\nLOW VAL: ");
-myprint_hex(ep_val & 0xFF);
-myprint("\r\n");
-*/

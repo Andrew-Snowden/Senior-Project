@@ -28,7 +28,7 @@ void EXTI3_IRQHandler(void) {
 
 	__HAL_GPIO_EXTI_CLEAR_IT(GPIO_PIN_3);
 
-	myprint("PRINT PRINT PRINT PLEASE WORK\r\n");
+	myprint("PLEASE WORK\r\n");
 
 	if (HAL_GPIO_ReadPin(GPIOF, GPIO_PIN_2))	//Forward
 	{
