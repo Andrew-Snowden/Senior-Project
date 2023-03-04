@@ -18,7 +18,6 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "adc.h"
 #include "tim.h"
 #include "usart.h"
 #include "gpio.h"
@@ -96,21 +95,25 @@ int main(void)
   MX_GPIO_Init();
   MX_USART3_UART_Init();
   MX_TIM3_Init();
-  //MX_ADC1_Init();
-  MX_TIM4_Init();
+  MX_TIM15_Init();
   /* USER CODE BEGIN 2 */
 
-  //Motor initialization -- Needs timer initialization to be rewritten
-  /*
-  Motor_Start();
-  Motor_SetDirection(MD_Left);
-  Motor_SetSpeed(200);
-   */
+  //Start rotary encoder
+  HAL_TIM_Encoder_Start(&htim3, TIM_CHANNEL_ALL);
 
-  HAL_TIM_Encoder_Start(&htim4, TIM_CHANNEL_ALL);
+  //Start motor
+  Motor_Start();
+  //Motor_SetDirection(MD_Right);
+  //Motor_SetSpeed(300);
+
+  //Find zero position
+
 
   myprint("Starting USB...\n\r");
   myusb_Initialize();
+
+  uint8_t direction = 0; //0 = right, 1 = left
+  volatile int16_t rotation_value = 0;
 
   //RotaryEncoderInit();
 
@@ -120,20 +123,29 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  //Simple delay for testing purposes
-	  for (int i = 0; i < 20000; i++);
 
-	  myprint_hex(htim4.Instance->CNT);
+	  rotation_value = htim3.Instance->CNT;
 
-	  //Set data in usb hid report
-	  report.members.throttle = ++report.members.throttle % 255;
-	  report.members.brake = ++report.members.brake % 255;
-	  report.members.steering = -1000;
+	  if ((int16_t)htim3.Instance->CNT < 0)
+	  {
+		  direction = 0;
+		  rotation_value = rotation_value * -1;
+	  }
+	  else
+	  {
+		  direction = 1;
+	  }
 
-	  //Motor code -- Needs timer initialization to be rewritten
-	  /*HAL_ADC_Start(&hadc1);
-	  HAL_ADC_PollForConversion(&hadc1, 200);
-	  Motor_SetSpeed(HAL_ADC_GetValue(&hadc1) * 3);*/
+	  rotation_value = rotation_value * 0.075;
+
+	  if (rotation_value > 600) rotation_value = 600;
+
+	  //myprint_dec(rotation_value);
+
+	  Motor_SetSpeed(rotation_value);
+	  Motor_SetDirection(direction);
+
+	  report.members.steering = htim3.Instance->CNT;
 
     /* USER CODE END WHILE */
 
@@ -181,11 +193,11 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
-  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USART3|RCC_PERIPHCLK_USB|RCC_PERIPHCLK_ADC12
-                              |RCC_PERIPHCLK_TIM34;
+  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USART3|RCC_PERIPHCLK_TIM15
+                              |RCC_PERIPHCLK_TIM34|RCC_PERIPHCLK_USB;
   PeriphClkInit.Usart3ClockSelection = RCC_USART3CLKSOURCE_HSI;
-  PeriphClkInit.Adc12ClockSelection = RCC_ADC12PLLCLK_DIV1;
-  PeriphClkInit.USBClockSelection = RCC_USBCLKSOURCE_PLL;
+  PeriphClkInit.USBClockSelection = RCC_USBCLKSOURCE_PLLCLK;
+  PeriphClkInit.Tim15ClockSelection = RCC_TIM15CLK_PLLCLK;
   PeriphClkInit.Tim34ClockSelection = RCC_TIM34CLK_PLLCLK;
   if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
   {

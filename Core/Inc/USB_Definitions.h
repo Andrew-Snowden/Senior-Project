@@ -64,7 +64,7 @@ typedef struct
 	uint8_t bInterval;
 } EndpointDescriptor;
 
-typedef struct
+typedef struct __attribute__((__packed__))
 {
 	uint8_t bLength;
 	uint8_t bDescriptorType;
@@ -72,7 +72,7 @@ typedef struct
 	uint8_t bCountryCode;
 	uint8_t bNumDescriptors;
 	uint8_t bDescriptorTypeReport;
-	uint8_t wDescriptorLength;
+	uint16_t wDescriptorLength;
 } HIDDescriptor;
 
 typedef struct 
@@ -152,5 +152,108 @@ typedef struct
 {
 	
 } RampForceBlock;
+
+union Device{
+	DeviceDescriptor descriptor;
+	uint8_t data[18];
+} device;
+
+union Configuration{
+	ConfigurationDescriptor descriptor;
+	uint8_t data[9];
+} configuration;
+
+union Interface{
+	InterfaceDescriptor descriptor;
+	uint8_t data[9];
+} interface;
+
+union Endpoint{
+	EndpointDescriptor descriptor;
+	uint8_t data[7];
+} endpoint;
+
+union HID{
+	HIDDescriptor descriptor;
+	uint8_t data[9];
+} hid;
+
+uint8_t const gamepad_report[63] = {
+	0x05, 0x01,	//Generic Desktop
+	0x09, 0x05, //Game Pad
+	0xA1, 0x01,	//Collection(App)
+	0xA1, 0x00,		//Collection (Physical)
+	0x05, 0x09,			//Usage Page (Button)
+	0x19, 0x01,			//Usage Min (Button 1)
+	0x29, 0x06,			//Usage Max (Button 6)
+	0x15, 0x00,			//Logical Min (0)
+	0x25, 0x01,			//Logical Max (1)
+	0x95, 0x06,			//Report Count (6)
+	0x75, 0x01,			//Report Size (1)
+	0x81, 0x02,			//Input (Variable)
+	0x95, 0x01,			//Report Count (1)
+	0x75, 0x02,			//Report Size (2)
+	0x81, 0x01,			//Input (Cnst)
+	0x05, 0x01,			//Usage Page (Generic)
+	0x09, 0x32,			//Usage (z)
+	0x09, 0x31,			//Usage (y)
+	0x15, 0x00,			//Logical Min (0)
+	0x26, 0xFF, 0x00,	//Logical Max (255)
+	0x75, 0x08,			//Report Size (8)
+	0x95, 0x02,			//Report Count (2)
+	0x81, 0x82,			//Input (Variable)
+	0x09, 0x30,			//Usage (X)
+	0x16, 0xC0, 0xC7,	//Logical Min (-14400)
+	0x26, 0x40, 0x38,	//Logical Max (14400)
+	0x75, 0x10,			//Report Size (16)
+	0x95, 0x01,			//Report Count (1)
+	0x81, 0x82,			//Input (Variable)
+	0xC0,			//End Collection
+	0xC0		//End Collection
+};
+
+uint8_t const ReportDescriptor[67] = {
+	0x05, 0x01,                    // USAGE_PAGE (Generic Desktop)
+	0x09, 0x04,                    // USAGE (Joystick)
+	0xa1, 0x01,                    // COLLECTION (Application)
+	0xa1, 0x00,                    //   COLLECTION (Physical)
+	0x05, 0x09,                    //     USAGE_PAGE (Button)
+	0x19, 0x01,                    //     USAGE_MINIMUM (Button 1)
+	0x29, 0x16,                    //     USAGE_MAXIMUM (Button 22)
+	0x15, 0x00,                    //     LOGICAL_MINIMUM (0)
+	0x25, 0x01,                    //     LOGICAL_MAXIMUM (1)
+	0x75, 0x01,                    //     REPORT_SIZE (1)
+	0x95, 0x16,                    //     REPORT_COUNT (22)
+	0x81, 0x02,                    //     INPUT (Data,Var,Abs)
+	0x75, 0x02,                    //     REPORT_SIZE (2)
+	0x95, 0x01,                    //     REPORT_COUNT (1)
+	0x81, 0x01,                    //     INPUT (Cnst,Ary,Abs)
+	0x05, 0x01,                    //     USAGE_PAGE (Generic Desktop)
+	0x09, 0x31,                    //     USAGE (Y)
+	0x09, 0x32,                    //     USAGE (Z)
+	0x09, 0x33,                    //     USAGE (Rx)
+	0x09, 0x34,                    //     USAGE (Ry)
+	0x15, 0x00,                    //     LOGICAL_MINIMUM (0)
+	0x26, 0xff, 0x00,              //     LOGICAL_MAXIMUM (255)
+	0x75, 0x08,                    //     REPORT_SIZE (8)
+	0x95, 0x04,                    //     REPORT_COUNT (4)
+	0x81, 0x02,                    //     INPUT (Data,Var,Abs)
+	0x09, 0x30,                    //     USAGE (X)
+	0x16, 0xc0, 0xc7,              //     LOGICAL_MINIMUM (-14400)
+	0x26, 0x40, 0x38,              //     LOGICAL_MAXIMUM (14400)
+	0x75, 0x10,                    //     REPORT_SIZE (16)
+	0x95, 0x01,                    //     REPORT_COUNT (1)
+	0x81, 0x02,                    //     INPUT (Data,Var,Abs)
+	0xc0,                          //     END_COLLECTION
+	0xc0                           // END_COLLECTION
+};
+
+typedef struct
+{
+	__IO uint16_t ADDR_TX;
+	__IO uint16_t COUNT_TX;
+	__IO uint16_t ADDR_RX;
+	__IO uint16_t COUNT_RX;
+} BTableLayout;
 
 #endif /* USB_DEFINITIONS_H_ */

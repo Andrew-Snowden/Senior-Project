@@ -28,3 +28,17 @@ void myprint_hex(int reg)
 
 	myprint("\r\n");
 }
+
+void myprint_dec(int reg)
+{
+	char buffer[20];
+	for (int i = 0; i < 20; i++)
+	{
+		buffer[i] = '\0';
+	}
+	itoa(reg, buffer, 10);
+	HAL_UART_Transmit(&huart3, buffer, 20, 0xFFFF);
+
+	myprint("\r\n");
+}
+

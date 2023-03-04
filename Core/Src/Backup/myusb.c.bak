@@ -28,8 +28,11 @@ typedef struct //__attribute__((packed))
 	__IO uint16_t COUNT_RX;
 } BTableLayout;
 volatile BTableLayout *my_btable;
+
 volatile uint16_t buffer[32];
 volatile uint8_t big_buffer[256];
+
+uint8_t address = 0;
 
 union Device{
 	DeviceDescriptor descriptor;
@@ -40,7 +43,6 @@ union Configuration{
 	ConfigurationDescriptor descriptor;
 	uint8_t data[9];
 } configuration;
-uint8_t address = 0;
 
 union Interface{
 	InterfaceDescriptor descriptor;
@@ -85,8 +87,8 @@ uint8_t const gamepad_report[63] = {
 	0x95, 0x02,			//Report Count (2)
 	0x81, 0x82,			//Input (Variable)
 	0x09, 0x30,			//Usage (X)
-	0x16, 0xF8, 0xF8,	//Logical Min (-1800)
-	0x26, 0x08, 0x07,	//Logical Max (1800)
+	0x16, 0xC0, 0xC7,	//Logical Min (-14400)
+	0x26, 0x40, 0x38,	//Logical Max (14400)
 	0x75, 0x10,			//Report Size (16)
 	0x95, 0x01,			//Report Count (1)
 	0x81, 0x82,			//Input (Variable)
@@ -116,10 +118,10 @@ void myusb_Initialize(void)
 	DescriptorInitialization();
 
 	//Initialize data in report
-	report.members.brake = 255;
+	report.members.brake = 0;
 	report.members.throttle = 0;
-	report.members.buttons = 0xF0;
-	report.members.steering = 500;
+	report.members.buttons = 0x00;
+	report.members.steering = 0;
 
 	//Map USBz to registers
 	USBz = USB;
@@ -221,7 +223,7 @@ void DescriptorInitialization(void)
 	endpoint.descriptor.bEndpointAddress = 0x81;
 	endpoint.descriptor.bmAttributes = 0x03;
 	endpoint.descriptor.wMaxPacketSize = 0x40; //64 bytes
-	endpoint.descriptor.bInterval = 0xA;
+	endpoint.descriptor.bInterval = 0x1;		//1ms
 
 	hid.descriptor.bLength = 0x09;
 	hid.descriptor.bDescriptorType = 0x21;
@@ -236,6 +238,7 @@ void DescriptorInitialization(void)
 /* -----------FUNCTIONS--------------*/
 /*-----------------------------------*/
 
+//Reads single byte past buffer if num_bytes is odd. Shouldn't result in any issues...
 void ReadEndpoint(uint8_t endpoint, uint8_t num_bytes)
 {
 	if (num_bytes != 0)
@@ -257,6 +260,7 @@ void ReadEndpoint(uint8_t endpoint, uint8_t num_bytes)
 	}
 }
 
+//Reads single byte past data_buffer if num_bytes is odd. Shouldn't result in any issues...
 void WriteEndpoint(uint8_t endpoint, uint16_t* data_buffer, uint8_t num_bytes)
 {
 	//Get offset to endpoint n TX buffer
@@ -276,7 +280,6 @@ void WriteEndpoint(uint8_t endpoint, uint16_t* data_buffer, uint8_t num_bytes)
 	{
 		location[i] = data_buffer[i];
 	}
-
 
 	//Set STAT_TX to VALID. Mask to avoid toggling the toggle bits.
 	switch(endpoint)
@@ -408,17 +411,11 @@ void EndpointCallback(void)
 				}
 				else if (USBz->EP0R & USB_EP_CTR_RX) //OUT
 				{
-
 					USBz->EP0R = ((~USB_EP_CTR_RX) & USBz->EP0R) & 0x8F8F;
 
 					uint8_t num_bytes = my_btable[0].COUNT_RX;
-/*					if ((address > 0) && (num_bytes == 0))
-					{
-						USBz->DADDR = address | (1 << 7);	//Set address and enable
-						address = 0;
-					}
 
-*/					//Set RX to Valid
+					//Set RX to Valid
 					USBz->EP0R = (1 << 12) | (USBz->EP0R & 0x9F8F);
 				}
 			}
@@ -440,7 +437,6 @@ void EndpointCallback(void)
 			else //IN
 			{
 				WriteEndpoint(1, report.data, 5);
-				//myprint("EP1 Request!\r\n");
 
 				USBz->EP1R = ((~USB_EP_CTR_TX) & USBz->EP1R) & 0x8F8F;
 			}
@@ -566,13 +562,3 @@ void SetupCallback(void)
 		break;
 	}
 }
-
-
-/*
-uint16_t ep_val = USBz->EP0R;
-myprint("HIGH VAL: ");
-myprint_hex(ep_val >> 8 & 0xFF);
-myprint("\r\nLOW VAL: ");
-myprint_hex(ep_val & 0xFF);
-myprint("\r\n");
-*/

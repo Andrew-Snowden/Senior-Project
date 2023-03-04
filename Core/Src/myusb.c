@@ -20,81 +20,25 @@
 
 USB_TypeDef * USBz;		/* USB Address Handle */
 
-typedef struct //__attribute__((packed))
-{
-	__IO uint16_t ADDR_TX;
-	__IO uint16_t COUNT_TX;
-	__IO uint16_t ADDR_RX;
-	__IO uint16_t COUNT_RX;
-} BTableLayout;
 volatile BTableLayout *my_btable;
 
-volatile uint16_t buffer[32];
-volatile uint8_t big_buffer[256];
+volatile uint16_t read_buffer[32];
+volatile uint8_t configuration_buffer[256];
 
 uint8_t address = 0;
 
-union Device{
-	DeviceDescriptor descriptor;
-	uint8_t data[18];
-} device;
-
-union Configuration{
-	ConfigurationDescriptor descriptor;
-	uint8_t data[9];
-} configuration;
-
-union Interface{
-	InterfaceDescriptor descriptor;
-	uint8_t data[9];
-} interface;
-
-union Endpoint{
-	EndpointDescriptor descriptor;
-	uint8_t data[7];
-} endpoint;
-
-union HID{
-	HIDDescriptor descriptor;
-	uint8_t data[9];
-} hid;
-
 Report report;
 
+typedef struct Transfer_s
+{
+	uint8_t* 	buffer;
+	uint8_t 	tx_finished;
+	uint8_t 	tx_increments;
+	uint16_t 	tx_length;
 
-uint8_t const gamepad_report[63] = {
-	0x05, 0x01,	//Generic Desktop
-	0x09, 0x05, //Game Pad
-	0xA1, 0x01,	//Collection(App)
-	0xA1, 0x00,		//Collection (Physical)
-	0x05, 0x09,			//Usage Page (Button)
-	0x19, 0x01,			//Usage Min (Button 1)
-	0x29, 0x06,			//Usage Max (Button 6)
-	0x15, 0x00,			//Logical Min (0)
-	0x25, 0x01,			//Logical Max (1)
-	0x95, 0x06,			//Report Count (6)
-	0x75, 0x01,			//Report Size (1)
-	0x81, 0x02,			//Input (Variable)
-	0x95, 0x01,			//Report Count (1)
-	0x75, 0x02,			//Report Size (2)
-	0x81, 0x01,			//Input (Cnst)
-	0x05, 0x01,			//Usage Page (Generic)
-	0x09, 0x32,			//Usage (z)
-	0x09, 0x31,			//Usage (y)
-	0x15, 0x00,			//Logical Min (0)
-	0x26, 0xFF, 0x00,	//Logical Max (255)
-	0x75, 0x08,			//Report Size (8)
-	0x95, 0x02,			//Report Count (2)
-	0x81, 0x82,			//Input (Variable)
-	0x09, 0x30,			//Usage (X)
-	0x16, 0xF8, 0xF8,	//Logical Min (-1800)
-	0x26, 0x08, 0x07,	//Logical Max (1800)
-	0x75, 0x10,			//Report Size (16)
-	0x95, 0x01,			//Report Count (1)
-	0x81, 0x82,			//Input (Variable)
-	0xC0,			//End Collection
-	0xC0		//End Collection
-};
+} Transfer_t;
+
+Transfer_t endpoint_0_tx = {0};
 
 static void DescriptorInitialization(void);
 
@@ -103,6 +47,8 @@ static void SetupCallback(void);
 
 static void ReadEndpoint(uint8_t endpoint, uint8_t num_bytes);
 static void WriteEndpoint(uint8_t endpoint, uint16_t* data_buffer, uint8_t num_bytes);
+
+static void EndpointTX(uint8_t endpoint, Transfer_t tx);
 
 /*-----------------------------------*/
 /* ----------INITIALIZATION----------*/
@@ -223,7 +169,7 @@ void DescriptorInitialization(void)
 	endpoint.descriptor.bEndpointAddress = 0x81;
 	endpoint.descriptor.bmAttributes = 0x03;
 	endpoint.descriptor.wMaxPacketSize = 0x40; //64 bytes
-	endpoint.descriptor.bInterval = 0xA;
+	endpoint.descriptor.bInterval = 0x1;		//1ms
 
 	hid.descriptor.bLength = 0x09;
 	hid.descriptor.bDescriptorType = 0x21;
@@ -231,7 +177,7 @@ void DescriptorInitialization(void)
 	hid.descriptor.bCountryCode = 0x00;
 	hid.descriptor.bNumDescriptors = 0x01;
 	hid.descriptor.bDescriptorTypeReport = 0x22;
-	hid.descriptor.wDescriptorLength = 0x3F; //63 bytes
+	hid.descriptor.wDescriptorLength = 67;
 }
 
 /*-----------------------------------*/
@@ -255,7 +201,7 @@ void ReadEndpoint(uint8_t endpoint, uint8_t num_bytes)
 
 		for (int i = 0; i < (num_bytes/2); i++)
 		{
-			buffer[i] = ((uint16_t*)location)[i];
+			read_buffer[i] = ((uint16_t*)location)[i];
 		}
 	}
 }
@@ -281,7 +227,6 @@ void WriteEndpoint(uint8_t endpoint, uint16_t* data_buffer, uint8_t num_bytes)
 		location[i] = data_buffer[i];
 	}
 
-
 	//Set STAT_TX to VALID. Mask to avoid toggling the toggle bits.
 	switch(endpoint)
 	{
@@ -295,6 +240,32 @@ void WriteEndpoint(uint8_t endpoint, uint16_t* data_buffer, uint8_t num_bytes)
 		USBz->EP2R = (1 << 4) | (USBz->EP2R & 0x8F9F);
 		break;
 	}
+}
+
+//Sets up overall transaction, allowing multi-packet transfers
+void EndpointTX(uint8_t endpoint, Transfer_t tx)
+{
+	if (endpoint_0_tx.tx_length == 0)
+	{
+		WriteEndpoint(endpoint, endpoint_0_tx.buffer, 0);
+		endpoint_0_tx.tx_finished = 1;
+		endpoint_0_tx.tx_increments = 0;
+	}
+	else if (endpoint_0_tx.tx_length >= 64)
+	{
+		WriteEndpoint(endpoint, endpoint_0_tx.buffer + (endpoint_0_tx.tx_increments * 64), 64);
+		endpoint_0_tx.tx_length -= 64;
+		endpoint_0_tx.tx_finished = 0;
+		endpoint_0_tx.tx_increments++;
+	}
+	else
+	{
+		WriteEndpoint(endpoint, endpoint_0_tx.buffer + (endpoint_0_tx.tx_increments * 64), endpoint_0_tx.tx_length);
+		endpoint_0_tx.tx_length = 0;
+		endpoint_0_tx.tx_finished = 1;
+		endpoint_0_tx.tx_increments = 0;
+	}
+
 }
 
 /*-----------------------------------*/
@@ -422,11 +393,22 @@ void EndpointCallback(void)
 			}
 			else //IN
 			{
+				//Set device address at end of SET_ADDRESS transaction
 				if ((address > 0))
 				{
 					USBz->DADDR = address | (1 << 7);	//Set address and enable
 					address = 0;
 				}
+
+				//myprint_dec(endpoint_0_tx.tx_finished);
+
+				if (endpoint_0_tx.tx_finished != 1)
+				{
+					EndpointTX(0, endpoint_0_tx);
+					//myprint_dec(endpoint_0_tx.tx_finished);
+				}
+
+				//Clear interrupt bit
 				USBz->EP0R = ((~USB_EP_CTR_TX) & USBz->EP0R) & 0x8F8F;
 			}
 		break;
@@ -453,11 +435,11 @@ void SetupCallback(void)
 	uint8_t descriptor_type;
 
 	//Determine Request
-	uint8_t bmRequestType = ((uint8_t*)buffer)[0];
-	uint8_t bRequest = ((uint8_t*)buffer)[1];
-	uint16_t wValue = buffer[1];
-	uint16_t wIndex = buffer[2];
-	uint16_t wLength = buffer[3];
+	uint8_t bmRequestType = ((uint8_t*)read_buffer)[0];
+	uint8_t bRequest = ((uint8_t*)read_buffer)[1];
+	uint16_t wValue = read_buffer[1];
+	uint16_t wIndex = read_buffer[2];
+	uint16_t wLength = read_buffer[3];
 
 	USBRequestDirection direction 	= (bmRequestType & 0x80) ? REQUEST_D2H : REQUEST_H2D;
 	USBRequestType type 			= (bmRequestType & 0x60) >> 5;
@@ -494,43 +476,56 @@ void SetupCallback(void)
 			//myprint_hex(wLength);
 
 			//Write data to PMA (sets endpoint transfer as valid)
-			WriteEndpoint(0, device.data, device.descriptor.bLength);
+			endpoint_0_tx.buffer = device.data;
+			endpoint_0_tx.tx_length = device.descriptor.bLength;
+			EndpointTX(0, endpoint_0_tx);
+			//WriteEndpoint(0, device.data, device.descriptor.bLength);
 			break;
 		case 2:
 			myprint("\t\t\tConfiguration\r\n");
 
 			if (wLength == 9)
 			{
-				WriteEndpoint(0, configuration.data, configuration.descriptor.bLength);
+				endpoint_0_tx.buffer = configuration.data;
+				endpoint_0_tx.tx_length = configuration.descriptor.bLength;
+				EndpointTX(0, endpoint_0_tx);
+				//WriteEndpoint(0, configuration.data, configuration.descriptor.bLength);
 			}
 			else
 			{
-				int big_buffer_index = 0;
-				for (int i = 0; i < configuration.descriptor.bLength; i++, big_buffer_index++)
+				int configuration_buffer_index = 0;
+				for (int i = 0; i < configuration.descriptor.bLength; i++, configuration_buffer_index++)
 				{
-					big_buffer[big_buffer_index] = configuration.data[i];
+					configuration_buffer[configuration_buffer_index] = configuration.data[i];
 				}
-				for (int i = 0; i < interface.descriptor.bLength; i++, big_buffer_index++)
+				for (int i = 0; i < interface.descriptor.bLength; i++, configuration_buffer_index++)
 				{
-					big_buffer[big_buffer_index] = interface.data[i];
+					configuration_buffer[configuration_buffer_index] = interface.data[i];
 				}
-				for (int i = 0; i < endpoint.descriptor.bLength; i++, big_buffer_index++)
+				for (int i = 0; i < endpoint.descriptor.bLength; i++, configuration_buffer_index++)
 				{
-					big_buffer[big_buffer_index] = endpoint.data[i];
+					configuration_buffer[configuration_buffer_index] = endpoint.data[i];
 				}
-				for (int i = 0; i < hid.descriptor.bLength; i++, big_buffer_index++)
+				for (int i = 0; i < hid.descriptor.bLength; i++, configuration_buffer_index++)
 				{
-					big_buffer[big_buffer_index] = hid.data[i];
+					configuration_buffer[configuration_buffer_index] = hid.data[i];
 				}
 
-				WriteEndpoint(0, big_buffer, big_buffer_index);
+				endpoint_0_tx.buffer = configuration_buffer;
+				endpoint_0_tx.tx_length = configuration_buffer_index;
+				EndpointTX(0, endpoint_0_tx);
+				//WriteEndpoint(0, configuration_buffer, configuration_buffer_index);
 			}
 
 			break;
 		case 34: //HID Report
 			myprint("\t\t\tHID Report\r\n");
 
-			WriteEndpoint(0, gamepad_report, 63);
+			endpoint_0_tx.buffer = ReportDescriptor;
+			endpoint_0_tx.tx_length = hid.descriptor.wDescriptorLength;
+
+			EndpointTX(0, endpoint_0_tx);
+
 			break;
 		default:
 			myprint("\t\t\tDefault: ");
