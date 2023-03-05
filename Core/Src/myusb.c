@@ -38,6 +38,8 @@ typedef struct Transfer_s
 
 } Transfer_t;
 
+uint8_t test_flag = 0;
+
 Transfer_t endpoint_0_tx = {0};
 
 static void DescriptorInitialization(void);
@@ -49,6 +51,9 @@ static void ReadEndpoint(uint8_t endpoint, uint8_t num_bytes);
 static void WriteEndpoint(uint8_t endpoint, uint16_t* data_buffer, uint8_t num_bytes);
 
 static void EndpointTX(uint8_t endpoint, Transfer_t tx);
+
+__attribute__((always_inline)) inline static void SetTXResponse(uint8_t endpoint, uint16_t response);
+__attribute__((always_inline)) inline static void SetRXResponse(uint8_t endpoint, uint16_t response);
 
 /*-----------------------------------*/
 /* ----------INITIALIZATION----------*/
@@ -64,9 +69,14 @@ void myusb_Initialize(void)
 	DescriptorInitialization();
 
 	//Initialize data in report
+	report.members.report_id = 1;
 	report.members.brake = 0;
 	report.members.throttle = 0;
-	report.members.buttons = 0x00;
+	report.members.clutch = 0;
+	report.members.handbrake = 0;
+	report.members.buttons_low = 0;
+	report.members.buttons_mid = 0;
+	report.members.buttons_high = 0;
 	report.members.steering = 0;
 
 	//Map USBz to registers
@@ -177,7 +187,7 @@ void DescriptorInitialization(void)
 	hid.descriptor.bCountryCode = 0x00;
 	hid.descriptor.bNumDescriptors = 0x01;
 	hid.descriptor.bDescriptorTypeReport = 0x22;
-	hid.descriptor.wDescriptorLength = 67;
+	hid.descriptor.wDescriptorLength = 1274;
 }
 
 /*-----------------------------------*/
@@ -228,19 +238,11 @@ void WriteEndpoint(uint8_t endpoint, uint16_t* data_buffer, uint8_t num_bytes)
 	}
 
 	//Set STAT_TX to VALID. Mask to avoid toggling the toggle bits.
-	switch(endpoint)
-	{
-	case 0:
-		USBz->EP0R = (1 << 4) | (USBz->EP0R & 0x8F9F);
-		break;
-	case 1:
-		USBz->EP1R = (1 << 4) | (USBz->EP1R & 0x8F9F);
-		break;
-	case 2:
-		USBz->EP2R = (1 << 4) | (USBz->EP2R & 0x8F9F);
-		break;
-	}
+	SetTXResponse(endpoint, ER_VALID);
 }
+//6260
+//0250
+//11 1
 
 //Sets up overall transaction, allowing multi-packet transfers
 void EndpointTX(uint8_t endpoint, Transfer_t tx)
@@ -363,7 +365,30 @@ void EndpointCallback(void)
 		switch(ep)
 		{
 		case 0:	//Control
-			if (dir) //OUT/SETUP
+			if (!dir) //IN
+			{
+				if (test_flag)
+				{
+					//myprint("!");
+					//myprint_hex(USBz->EP0R);
+				}
+				//Set device address at end of SET_ADDRESS transaction
+				if ((address > 0))
+				{
+					USBz->DADDR = address | (1 << 7);	//Set address and enable
+					address = 0;
+				}
+
+				//Continue transfer if there are packets left to send
+				if (endpoint_0_tx.tx_finished != 1)
+				{
+					EndpointTX(0, endpoint_0_tx);
+				}
+
+				//Clear interrupt bit
+				USBz->EP0R = ((~USB_EP_CTR_TX) & USBz->EP0R) & 0x8F8F;
+			}
+			else	//OUT/SETUP
 			{
 				//See if SETUP has been received
 				if (USBz->EP0R & USB_EP_SETUP)	//SETUP
@@ -379,7 +404,7 @@ void EndpointCallback(void)
 					SetupCallback();
 
 					//Set RX to Valid
-					USBz->EP0R = (1 << 12) | (USBz->EP0R & 0x9F8F);
+					SetRXResponse(0, ER_VALID);
 				}
 				else if (USBz->EP0R & USB_EP_CTR_RX) //OUT
 				{
@@ -388,39 +413,26 @@ void EndpointCallback(void)
 					uint8_t num_bytes = my_btable[0].COUNT_RX;
 
 					//Set RX to Valid
-					USBz->EP0R = (1 << 12) | (USBz->EP0R & 0x9F8F);
+					SetRXResponse(0, ER_VALID);
 				}
-			}
-			else //IN
-			{
-				//Set device address at end of SET_ADDRESS transaction
-				if ((address > 0))
-				{
-					USBz->DADDR = address | (1 << 7);	//Set address and enable
-					address = 0;
-				}
-
-				//myprint_dec(endpoint_0_tx.tx_finished);
-
-				if (endpoint_0_tx.tx_finished != 1)
-				{
-					EndpointTX(0, endpoint_0_tx);
-					//myprint_dec(endpoint_0_tx.tx_finished);
-				}
-
-				//Clear interrupt bit
-				USBz->EP0R = ((~USB_EP_CTR_TX) & USBz->EP0R) & 0x8F8F;
 			}
 		break;
 		case 1: //Endpoint
 			if (dir) //OUT/SETUP
 			{
 
+				uint8_t num_bytes = my_btable[0].COUNT_RX;
+				if (num_bytes > 0)
+				{
+					ReadEndpoint(0, num_bytes);
+				}
+
+				myprint("EP1 OUT!\r\n");
+				myprint_dec(num_bytes);
 			}
 			else //IN
 			{
-				WriteEndpoint(1, report.data, 5);
-
+				WriteEndpoint(1, report.data, 10);
 				USBz->EP1R = ((~USB_EP_CTR_TX) & USBz->EP1R) & 0x8F8F;
 			}
 
@@ -445,116 +457,171 @@ void SetupCallback(void)
 	USBRequestType type 			= (bmRequestType & 0x60) >> 5;
 	USBRequestRecipient recipient 	= bmRequestType & 0x1F;
 
-	//Handle Request
-	switch(bRequest)
+	//Standard
+	if (type == 0)
 	{
-	case GET_STATUS:
-		myprint("\t\tGET_STATUS\r\n");
-		break;
-	case CLEAR_FEATURE:
-		myprint("\t\tCLEAR_FEATURE\r\n");
-		break;
-	case SET_FEATURE:
-		myprint("\t\tSET_FEATURE\r\n");
-		break;
-	case SET_ADDRESS:
-		address = wValue & 0x7F;
-		my_btable[0].COUNT_TX = 0;
-		USBz->EP0R = (1 << 4) | (USBz->EP0R & 0x8F9F);
-
-		myprint("\t\tSET_ADDRESS\r\n");
-
-		break;
-	case GET_DESCRIPTOR:
-		myprint("\t\tGET_DESCRIPTOR\r\n");
-		descriptor_type = (wValue >> 8) & 0xFF;
-
-		switch(descriptor_type)
+		//Handle Request
+		switch(bRequest)
 		{
-		case 1:
-			myprint("\t\t\tDevice\r\n");
-			//myprint_hex(wLength);
-
-			//Write data to PMA (sets endpoint transfer as valid)
-			endpoint_0_tx.buffer = device.data;
-			endpoint_0_tx.tx_length = device.descriptor.bLength;
-			EndpointTX(0, endpoint_0_tx);
-			//WriteEndpoint(0, device.data, device.descriptor.bLength);
+		case GET_STATUS:
+			myprint("\t\tGET_STATUS\r\n");
 			break;
-		case 2:
-			myprint("\t\t\tConfiguration\r\n");
+		case CLEAR_FEATURE:
+			myprint("\t\tCLEAR_FEATURE\r\n");
+			endpoint_0_tx.buffer = configuration_buffer;
+			endpoint_0_tx.tx_length = 0;
+			EndpointTX(0, endpoint_0_tx);
+			break;
+		case SET_FEATURE:
+			myprint("\t\tSET_FEATURE\r\n");
+			break;
+		case SET_ADDRESS:
+			address = wValue & 0x7F;
+			my_btable[0].COUNT_TX = 0;
+			USBz->EP0R = (1 << 4) | (USBz->EP0R & 0x8F9F);
 
-			if (wLength == 9)
-			{
-				endpoint_0_tx.buffer = configuration.data;
-				endpoint_0_tx.tx_length = configuration.descriptor.bLength;
-				EndpointTX(0, endpoint_0_tx);
-				//WriteEndpoint(0, configuration.data, configuration.descriptor.bLength);
-			}
-			else
-			{
-				int configuration_buffer_index = 0;
-				for (int i = 0; i < configuration.descriptor.bLength; i++, configuration_buffer_index++)
-				{
-					configuration_buffer[configuration_buffer_index] = configuration.data[i];
-				}
-				for (int i = 0; i < interface.descriptor.bLength; i++, configuration_buffer_index++)
-				{
-					configuration_buffer[configuration_buffer_index] = interface.data[i];
-				}
-				for (int i = 0; i < endpoint.descriptor.bLength; i++, configuration_buffer_index++)
-				{
-					configuration_buffer[configuration_buffer_index] = endpoint.data[i];
-				}
-				for (int i = 0; i < hid.descriptor.bLength; i++, configuration_buffer_index++)
-				{
-					configuration_buffer[configuration_buffer_index] = hid.data[i];
-				}
-
-				endpoint_0_tx.buffer = configuration_buffer;
-				endpoint_0_tx.tx_length = configuration_buffer_index;
-				EndpointTX(0, endpoint_0_tx);
-				//WriteEndpoint(0, configuration_buffer, configuration_buffer_index);
-			}
+			myprint("\t\tSET_ADDRESS\r\n");
 
 			break;
-		case 34: //HID Report
-			myprint("\t\t\tHID Report\r\n");
+		case GET_DESCRIPTOR:
+			myprint("\t\tGET_DESCRIPTOR\r\n");
+			descriptor_type = (wValue >> 8) & 0xFF;
 
-			endpoint_0_tx.buffer = ReportDescriptor;
-			endpoint_0_tx.tx_length = hid.descriptor.wDescriptorLength;
+			switch(descriptor_type)
+			{
+			case 1:
+				myprint("\t\t\tDevice\r\n");
 
+				endpoint_0_tx.buffer = device.data;
+				endpoint_0_tx.tx_length = device.descriptor.bLength;
+				EndpointTX(0, endpoint_0_tx);
+				break;
+			case 2:
+				myprint("\t\t\tConfiguration\r\n");
+
+				if (wLength == 9)
+				{
+					endpoint_0_tx.buffer = configuration.data;
+					endpoint_0_tx.tx_length = configuration.descriptor.bLength;
+					EndpointTX(0, endpoint_0_tx);
+				}
+				else
+				{
+					int configuration_buffer_index = 0;
+					for (int i = 0; i < configuration.descriptor.bLength; i++, configuration_buffer_index++)
+					{
+						configuration_buffer[configuration_buffer_index] = configuration.data[i];
+					}
+					for (int i = 0; i < interface.descriptor.bLength; i++, configuration_buffer_index++)
+					{
+						configuration_buffer[configuration_buffer_index] = interface.data[i];
+					}
+					for (int i = 0; i < endpoint.descriptor.bLength; i++, configuration_buffer_index++)
+					{
+						configuration_buffer[configuration_buffer_index] = endpoint.data[i];
+					}
+					for (int i = 0; i < hid.descriptor.bLength; i++, configuration_buffer_index++)
+					{
+						configuration_buffer[configuration_buffer_index] = hid.data[i];
+					}
+
+					endpoint_0_tx.buffer = configuration_buffer;
+					endpoint_0_tx.tx_length = configuration_buffer_index;
+					EndpointTX(0, endpoint_0_tx);
+				}
+
+				break;
+			case 34: //HID Report
+				myprint("\t\t\tHID Report\r\n");
+
+				endpoint_0_tx.buffer = ReportDescriptor;
+				endpoint_0_tx.tx_length = hid.descriptor.wDescriptorLength;
+				myprint_hex(USBz->EP0R);
+
+				EndpointTX(0, endpoint_0_tx);
+				test_flag = 1;
+				break;
+			default:
+				myprint("\t\t\tDefault: ");
+				myprint_hex(descriptor_type);
+				myprint("\r\n");
+				break;
+			}
+
+			break;
+		case SET_DESCRIPTOR:
+			myprint("\t\tSET_DESCRIPTOR\r\n");
+			break;
+		case GET_CONFIGURATION:
+			myprint("\t\tGET_CONFIGURATION\r\n");
+			break;
+		case SET_CONFIGURATION:
+			myprint("\t\tSET_CONFIGURATION\r\n");
+			endpoint_0_tx.buffer = configuration_buffer;
+			endpoint_0_tx.tx_length = 0;
 			EndpointTX(0, endpoint_0_tx);
-
+			break;
+		case GET_INTERFACE:
+			myprint("\t\tGET_INTERFACE\r\n");
+			break;
+		case SET_INTERFACE:
+			myprint("\t\tSET_INTERFACE\r\n");
+			break;
+		case SYNCH_FRAME:
+			myprint("\t\tSYNCH_FRAME\r\n");
 			break;
 		default:
-			myprint("\t\t\tDefault: ");
-			myprint_hex(descriptor_type);
-			myprint("\r\n");
+			myprint("\t\tWE SHOULDN'T BE HERE IN THE SETUP\r\n");
 			break;
 		}
-
-		break;
-	case SET_DESCRIPTOR:
-		myprint("\t\tSET_DESCRIPTOR\r\n");
-		break;
-	case GET_CONFIGURATION:
-		myprint("\t\tGET_CONFIGURATION\r\n");
-		break;
-	case SET_CONFIGURATION:
-		myprint("\t\tSET_CONFIGURATION\r\n");
-		break;
-	case GET_INTERFACE:
-		myprint("\t\tGET_INTERFACE\r\n");
-		break;
-	case SET_INTERFACE:
-		myprint("\t\tSET_INTERFACE\r\n");
-		break;
-	case SYNCH_FRAME:
-		myprint("\t\tSYNCH_FRAME\r\n");
-		break;
-	default:
-		myprint("\t\tWE SHOULDN'T BE HERE IN THE SETUP\r\n");
-		break;
+	}
+	else if (type == 1)	//Class
+	{
+		switch(bRequest)
+		{
+		case GET_REPORT:
+			myprint("\t\tGET_REPORT\r\n");
+			break;
+		case GET_IDLE:
+			myprint("\t\tGET_IDLE\r\n");
+			break;
+		case GET_PROTOCOL:
+			myprint("\t\tGET_PROTOCOL\r\n");
+			break;
+		case SET_REPORT:
+			myprint("\t\tSET_REPORT\r\n");
+			break;
+		case SET_IDLE:
+			endpoint_0_tx.buffer = configuration_buffer;
+			endpoint_0_tx.tx_length = 0;
+			EndpointTX(0, endpoint_0_tx);
+			myprint("\t\tSET_IDLE\r\n");
+			break;
+		case SET_PROTOCOL:
+			myprint("\t\tSET_PROTOCOL\r\n");
+			break;
+		default:
+			myprint("\t\tWE SHOULDN'T BE HERE IN THE CLASS SETUP\r\n");
+			break;
+		}
+	}
+	else
+	{
+		myprint("HERE!!!!!\r\n");
 	}
 }
+
+__attribute__((always_inline)) inline static void SetTXResponse(uint8_t endpoint, uint16_t response)
+{
+	*( (uint16_t*)0x40005C00 + (endpoint*4) ) = 0x8FBF & (*( (uint16_t*)0x40005C00 + (endpoint*4) ) ^ ((response << 4) & 0x30));
+}
+
+
+__attribute__((always_inline)) inline static void SetRXResponse(uint8_t endpoint, uint16_t response)
+{
+	*( (uint16_t*)0x40005C00 + (endpoint*4) ) = 0xBF8F & (*( (uint16_t*)0x40005C00 + (endpoint*4) ) ^ ((response << 12) & 0x3000));
+}
+
+
+
+

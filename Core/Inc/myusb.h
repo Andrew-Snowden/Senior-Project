@@ -17,13 +17,19 @@
 
 typedef union
 {
-	struct  __attribute__((packed)){
-		uint8_t buttons;
+	struct __attribute__((__packed__))
+	{
+		uint8_t report_id;
+		uint8_t buttons_low;
+		uint8_t buttons_mid;
+		uint8_t buttons_high;
 		uint8_t throttle;
 		uint8_t brake;
+		uint8_t clutch;
+		uint8_t handbrake;
 		int16_t steering;
 	} members;
-	uint8_t data[5];
+	uint8_t data[10];
 } Report;
 
 extern Report report;
