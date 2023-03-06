@@ -42,6 +42,9 @@ uint8_t test_flag = 0;
 
 Transfer_t endpoint_0_tx = {0};
 
+union PIDPoolReport pool_report;
+union PIDBlockLoadReport block_load_report;
+
 static void DescriptorInitialization(void);
 
 static void EndpointCallback(void);
@@ -78,6 +81,8 @@ void myusb_Initialize(void)
 	report.members.buttons_mid = 0;
 	report.members.buttons_high = 0;
 	report.members.steering = 0;
+
+	//myprint_dec(sizeof(ReportDescriptor));
 
 	//Map USBz to registers
 	USBz = USB;
@@ -147,8 +152,8 @@ void DescriptorInitialization(void)
 	device.descriptor.bDeviceSubClass = 0x00;
 	device.descriptor.bDeviceProtocol = 0x00;
 	device.descriptor.bMaxPacketSize0 = 64;
-	device.descriptor.idVendor = 0x03ED;
-	device.descriptor.idProduct = 0x2FF4;
+	device.descriptor.idVendor = 0x045e;	//03ED
+	device.descriptor.idProduct = 0x001b;	//2FF4
 	device.descriptor.bcdDevice = 0x0100;
 	device.descriptor.iManufacturer = 0x00;
 	device.descriptor.iProduct = 0x00;
@@ -240,9 +245,7 @@ void WriteEndpoint(uint8_t endpoint, uint16_t* data_buffer, uint8_t num_bytes)
 	//Set STAT_TX to VALID. Mask to avoid toggling the toggle bits.
 	SetTXResponse(endpoint, ER_VALID);
 }
-//6260
-//0250
-//11 1
+
 
 //Sets up overall transaction, allowing multi-packet transfers
 void EndpointTX(uint8_t endpoint, Transfer_t tx)
@@ -367,11 +370,6 @@ void EndpointCallback(void)
 		case 0:	//Control
 			if (!dir) //IN
 			{
-				if (test_flag)
-				{
-					//myprint("!");
-					//myprint_hex(USBz->EP0R);
-				}
 				//Set device address at end of SET_ADDRESS transaction
 				if ((address > 0))
 				{
@@ -421,14 +419,19 @@ void EndpointCallback(void)
 			if (dir) //OUT/SETUP
 			{
 
-				uint8_t num_bytes = my_btable[0].COUNT_RX;
+				uint8_t num_bytes = my_btable[1].COUNT_RX;
 				if (num_bytes > 0)
 				{
-					ReadEndpoint(0, num_bytes);
+					ReadEndpoint(1, num_bytes);
+					myprint("Report ID: ");
+					uint8_t report_id = read_buffer[0];
+					myprint_dec(report_id);
+					myprint("\r\n");
 				}
 
 				myprint("EP1 OUT!\r\n");
 				myprint_dec(num_bytes);
+				SetRXResponse(1, ER_VALID);
 			}
 			else //IN
 			{
@@ -452,6 +455,9 @@ void SetupCallback(void)
 	uint16_t wValue = read_buffer[1];
 	uint16_t wIndex = read_buffer[2];
 	uint16_t wLength = read_buffer[3];
+
+	uint8_t wValueHigh = wValue >> 8;
+	uint8_t wValueLow = wValue & 0xFF;
 
 	USBRequestDirection direction 	= (bmRequestType & 0x80) ? REQUEST_D2H : REQUEST_H2D;
 	USBRequestType type 			= (bmRequestType & 0x60) >> 5;
@@ -536,8 +542,6 @@ void SetupCallback(void)
 
 				endpoint_0_tx.buffer = ReportDescriptor;
 				endpoint_0_tx.tx_length = hid.descriptor.wDescriptorLength;
-				myprint_hex(USBz->EP0R);
-
 				EndpointTX(0, endpoint_0_tx);
 				test_flag = 1;
 				break;
@@ -581,28 +585,71 @@ void SetupCallback(void)
 		{
 		case GET_REPORT:
 			myprint("\t\tGET_REPORT\r\n");
-			break;
+			switch (wValueHigh)
+			{
+			case 1:	//Input
+				myprint("\t\t\tInput\r\n");
+				break;
+			case 2:	//Output
+				myprint("\t\t\tOutput\r\n");
+				break;
+			case 3: //Feature
+				myprint("\t\t\tFeature\r\n");
+				switch(wValueLow)
+				{
+				case 1:
+					myprint("\t\t\t\t1\r\n");
+					break;
+				case 2: //Block Load Report
+					block_load_report.report.report_id = 2;
+					block_load_report.report.ram_pool_available = 0xFFFF;
+					block_load_report.report.effect_block_index = 1;
+					block_load_report.report.block_load_status = 1;
+
+					endpoint_0_tx.buffer = block_load_report.data+1;
+					endpoint_0_tx.tx_length = 6;
+					EndpointTX(0, endpoint_0_tx);
+					myprint("\t\t\t\t2\r\n");
+					break;
+				case 3:	//PID Pool Report
+					//myprint("\t\t\t\t3\r\n");
+					pool_report.report.report_id = 3;
+					pool_report.report.ram_pool_size = 0xFFFF;
+					pool_report.report.simultaneous_effects_max = 5;
+					pool_report.report.device_manage_pool_shared_parameter_blocks = 0;
+
+					endpoint_0_tx.buffer = pool_report.data;
+					endpoint_0_tx.tx_length = 5;
+					EndpointTX(0, endpoint_0_tx);
+					break;
+				}
+
+				break;
+			default:
+				myprint("GET_REPORT SHOULDN'T BE HERE\r\n");
+			}
+		break;
 		case GET_IDLE:
 			myprint("\t\tGET_IDLE\r\n");
-			break;
+		break;
 		case GET_PROTOCOL:
 			myprint("\t\tGET_PROTOCOL\r\n");
-			break;
+		break;
 		case SET_REPORT:
 			myprint("\t\tSET_REPORT\r\n");
-			break;
+		break;
 		case SET_IDLE:
 			endpoint_0_tx.buffer = configuration_buffer;
 			endpoint_0_tx.tx_length = 0;
 			EndpointTX(0, endpoint_0_tx);
 			myprint("\t\tSET_IDLE\r\n");
-			break;
+		break;
 		case SET_PROTOCOL:
 			myprint("\t\tSET_PROTOCOL\r\n");
-			break;
+		break;
 		default:
 			myprint("\t\tWE SHOULDN'T BE HERE IN THE CLASS SETUP\r\n");
-			break;
+		break;
 		}
 	}
 	else
@@ -613,15 +660,11 @@ void SetupCallback(void)
 
 __attribute__((always_inline)) inline static void SetTXResponse(uint8_t endpoint, uint16_t response)
 {
-	*( (uint16_t*)0x40005C00 + (endpoint*4) ) = 0x8FBF & (*( (uint16_t*)0x40005C00 + (endpoint*4) ) ^ ((response << 4) & 0x30));
+	*( (uint16_t*)(0x40005C00 + (endpoint*4)) ) = 0x8FBF & (*( (uint16_t*)(0x40005C00 + (endpoint*4)) ) ^ (response << 4));
 }
 
 
 __attribute__((always_inline)) inline static void SetRXResponse(uint8_t endpoint, uint16_t response)
 {
-	*( (uint16_t*)0x40005C00 + (endpoint*4) ) = 0xBF8F & (*( (uint16_t*)0x40005C00 + (endpoint*4) ) ^ ((response << 12) & 0x3000));
+	*( (uint16_t*)(0x40005C00 + (endpoint*4)) ) = 0xBF8F & (*( (uint16_t*)(0x40005C00 + (endpoint*4)) ) ^ (response << 12));
 }
-
-
-
-
