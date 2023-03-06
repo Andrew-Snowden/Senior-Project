@@ -627,6 +627,7 @@ void SetupCallback(void)
 				break;
 			default:
 				myprint("GET_REPORT SHOULDN'T BE HERE\r\n");
+				break;
 			}
 		break;
 		case GET_IDLE:
