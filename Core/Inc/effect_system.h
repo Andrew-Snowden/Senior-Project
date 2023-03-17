@@ -58,8 +58,8 @@ struct ConstantForce
 struct Condition
 {
 	int16_t center_point_offset;
-	int16_t positive_coefficient;
-	int16_t negative_coefficient;
+	float positive_coefficient;
+	float negative_coefficient;
 	int16_t positive_saturation;
 	int16_t negative_saturation;
 	int16_t dead_band;
@@ -67,9 +67,9 @@ struct Condition
 
 struct EffectBlock
 {
-	uint8_t effect_type;
-	uint16_t duration;					//1ms increments
 	uint16_t sample_period;				//1ms increments
+	uint16_t duration;					//1ms increments
+	uint8_t effect_type;
 	uint16_t trigger_repeat_interval;	//1ms increments
 	uint8_t gain;
 };
@@ -87,7 +87,7 @@ struct Effect
 	uint16_t tick;		//1ms increments
 };
 
-extern struct Effect effects[MAX_EFFECTS];
+extern volatile struct Effect effects[MAX_EFFECTS];
 
 int16_t ES_CalculateConditionForce(int16_t metric, struct Condition condition);
 float ES_CalculateEnvelope(struct Effect effect);

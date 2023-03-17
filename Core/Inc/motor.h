@@ -28,7 +28,7 @@ void Motor_Start(void);
 void Motor_Stop(void);
 float Motor_GetSpeed(void);
 float Motor_GetAcceleration(void);
-uint16_t Motor_GetPosition(void);
+int16_t Motor_GetPosition(void);
 
 void Motor_CalculateSpeed(void);
 uint8_t Motor_IsReady(void);

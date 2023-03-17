@@ -28,9 +28,9 @@
 #include "myprint.h"
 
 #include "myusb.h"
-#include "encoder.h"
 #include "adc.h"
 #include "driving_peripherals.h"
+#include "effect_system.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -74,7 +74,34 @@ void SystemClock_Config(void);
 int main(void)
 {
   /* USER CODE BEGIN 1 */
+/*	  struct Effect spring_effect = {0};
 
+	  spring_effect.condition.negative_coefficient = -0.075;
+	  spring_effect.condition.positive_coefficient = 0.075;
+	  spring_effect.effect_block.gain = 100;
+	  spring_effect.effect_block.effect_type = ET_Spring;
+
+	  uint16_t spring_effect_index = ES_AddEffect(spring_effect);
+	  ES_StartEffect(spring_effect_index);
+
+	  struct Effect damper_effect = {0};
+
+	  damper_effect.condition.negative_coefficient = -0.5;
+	  damper_effect.condition.positive_coefficient = 0.5;
+	  damper_effect.effect_block.gain = 100;
+	  damper_effect.effect_block.effect_type = ET_Damper;
+
+	  uint16_t damper_effect_index = ES_AddEffect(damper_effect);
+	  ES_StartEffect(damper_effect_index);*/
+
+	  struct Effect constant_force_effect = {0};
+
+	  constant_force_effect.constant_force.magnitude = 200;
+	  constant_force_effect.effect_block.gain = 100;
+	  constant_force_effect.effect_block.effect_type = ET_ConstantForce;
+
+	  uint16_t constant_force_effect_index = ES_AddEffect(constant_force_effect);
+	  ES_StartEffect(constant_force_effect_index);
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -125,7 +152,6 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  myprint_dec(0);
 /*
 	  rotation_value = htim3.Instance->CNT;
 
@@ -147,14 +173,14 @@ int main(void)
 
 	  Motor_SetForce(rotation_value);
 	  Motor_SetDirection(direction);
-
+*/
 	  report.members.steering = htim3.Instance->CNT;
 
 	  report.members.throttle 	= Pedal_GetAxisValue(throttle);
 	  report.members.brake 		= Pedal_GetAxisValue(brake);
 	  report.members.clutch		= Pedal_GetAxisValue(clutch);
 	  report.members.handbrake	= Pedal_GetAxisValue(handbrake);
-*/
+
 
     /* USER CODE END WHILE */
 

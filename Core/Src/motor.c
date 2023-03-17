@@ -1,6 +1,5 @@
 #include "motor.h"
 #include "tim.h"
-#include "encoder.h"
 
 //deg/s
 float motor_speed = 0;
@@ -8,7 +7,9 @@ float previous_motor_speed = 0;
 
 uint8_t ready = 0;
 
-uint32_t motor_force = 0;
+volatile int16_t previous_motor_position;
+
+volatile uint32_t motor_force = 0;
 enum MotorDirection motor_direction = MD_Right;
 
 void Motor_SetDirection(enum MotorDirection direction)
@@ -85,19 +86,19 @@ float Motor_GetAcceleration(void)
 	return delta * 1000;
 }
 
-uint16_t Motor_GetPosition(void)
+volatile int16_t Motor_GetPosition(void)
 {
-	return rotary_position;
+	return htim3.Instance->CNT;
 }
 
 //Called every 1ms
 void Motor_CalculateSpeed(void)
 {
-	int16_t delta = (rotary_position - previous_rotary_position);
-	previous_rotary_position = rotary_position;
+	int16_t motor_position = Motor_GetPosition();
+	int16_t delta = (motor_position - previous_motor_position);
+	previous_motor_position = motor_position;
 
-	if (delta < 0) delta *= -1000;
-	else delta *= 1000;
+	delta *= 1000;
 
 	motor_speed = delta / 28;
 }
