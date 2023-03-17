@@ -23,6 +23,10 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "myprint.h"
+#include "stm32f303xe.h"
+#include "effect_system.h"
+#include "encoder.h"
+#include "motor.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -52,7 +56,7 @@
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+volatile int count = 0;
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
@@ -184,10 +188,20 @@ void PendSV_Handler(void)
 void SysTick_Handler(void)
 {
   /* USER CODE BEGIN SysTick_IRQn 0 */
+	/****Must complete SysTick_Handler in < 72,000 cycles. Preferably far less to allow other interrupts to run....****/
+	if (Motor_IsReady()) Motor_CalculateSpeed();
 
+	count++;
+	if (count == 10)
+	{
+		ADC3->CR |= ADC_CR_ADSTART;
+		count = 0;
+	}
   /* USER CODE END SysTick_IRQn 0 */
   HAL_IncTick();
   /* USER CODE BEGIN SysTick_IRQn 1 */
+
+  if (Motor_IsReady()) ES_PlayEffects();
 
   /* USER CODE END SysTick_IRQn 1 */
 }

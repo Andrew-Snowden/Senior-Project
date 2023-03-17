@@ -29,6 +29,8 @@
 
 #include "myusb.h"
 #include "encoder.h"
+#include "adc.h"
+#include "driving_peripherals.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -101,10 +103,10 @@ int main(void)
   //Start rotary encoder
   HAL_TIM_Encoder_Start(&htim3, TIM_CHANNEL_ALL);
 
-  //Start motor
   Motor_Start();
-  //Motor_SetDirection(MD_Right);
-  //Motor_SetSpeed(300);
+
+  //Initialize pedals/peripherals
+  ADC_Init();
 
   //Find zero position
 
@@ -112,10 +114,10 @@ int main(void)
   myprint("Starting USB...\n\r");
   myusb_Initialize();
 
-  uint8_t direction = 0; //0 = right, 1 = left
-  volatile int16_t rotation_value = 0;
+  //uint8_t direction = 0; //0 = right, 1 = left
+  //volatile int16_t rotation_value = 0;
 
-  //RotaryEncoderInit();
+
 
   /* USER CODE END 2 */
 
@@ -123,7 +125,8 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-
+	  myprint_dec(0);
+/*
 	  rotation_value = htim3.Instance->CNT;
 
 	  if ((int16_t)htim3.Instance->CNT < 0)
@@ -142,10 +145,16 @@ int main(void)
 
 	  //myprint_dec(rotation_value);
 
-	  Motor_SetSpeed(rotation_value);
+	  Motor_SetForce(rotation_value);
 	  Motor_SetDirection(direction);
 
 	  report.members.steering = htim3.Instance->CNT;
+
+	  report.members.throttle 	= Pedal_GetAxisValue(throttle);
+	  report.members.brake 		= Pedal_GetAxisValue(brake);
+	  report.members.clutch		= Pedal_GetAxisValue(clutch);
+	  report.members.handbrake	= Pedal_GetAxisValue(handbrake);
+*/
 
     /* USER CODE END WHILE */
 
@@ -194,11 +203,12 @@ void SystemClock_Config(void)
     Error_Handler();
   }
   PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USART3|RCC_PERIPHCLK_TIM15
-                              |RCC_PERIPHCLK_TIM34|RCC_PERIPHCLK_USB;
+                              |RCC_PERIPHCLK_TIM34|RCC_PERIPHCLK_USB|RCC_PERIPHCLK_ADC34;
   PeriphClkInit.Usart3ClockSelection = RCC_USART3CLKSOURCE_HSI;
   PeriphClkInit.USBClockSelection = RCC_USBCLKSOURCE_PLLCLK;
   PeriphClkInit.Tim15ClockSelection = RCC_TIM15CLK_PLLCLK;
   PeriphClkInit.Tim34ClockSelection = RCC_TIM34CLK_PLLCLK;
+  PeriphClkInit.Adc34ClockSelection = RCC_ADC34PLLCLK_DIV2;
   if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
   {
     Error_Handler();
@@ -206,11 +216,8 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
-
-
-
-
-
+//RCC_PERIPHCLK_USB | RCC_PERIPHCLK_ADC34
+//PeriphClkInit.Adc34ClockSelection = RCC_ADC34PLLCLK_DIV2;
 
 
 

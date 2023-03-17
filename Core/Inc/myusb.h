@@ -23,13 +23,13 @@ typedef union
 		uint8_t buttons_low;
 		uint8_t buttons_mid;
 		uint8_t buttons_high;
-		uint8_t throttle;
-		uint8_t brake;
-		uint8_t clutch;
-		uint8_t handbrake;
+		uint16_t throttle;
+		uint16_t brake;
+		uint16_t clutch;
+		uint16_t handbrake;
 		int16_t steering;
 	} members;
-	uint8_t data[10];
+	uint8_t data[14];
 } Report;
 
 extern Report report;

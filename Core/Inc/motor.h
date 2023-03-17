@@ -11,7 +11,7 @@
 #include <stdint.h>
 
 //Variables
-//extern uint32_t motor_speed;
+extern float motor_speed;
 
 //Defines
 enum MotorDirection
@@ -20,10 +20,21 @@ enum MotorDirection
 	MD_Left
 };
 
+
 //Functions
 void Motor_SetDirection(enum MotorDirection direction);
-void Motor_SetSpeed(uint32_t speed);
-void Motor_Start();
-void Motor_Stop();
+void Motor_SetForce(uint32_t force);
+void Motor_Start(void);
+void Motor_Stop(void);
+float Motor_GetSpeed(void);
+float Motor_GetAcceleration(void);
+uint16_t Motor_GetPosition(void);
+
+void Motor_CalculateSpeed(void);
+uint8_t Motor_IsReady(void);
+
+
+
+
 
 #endif /* SRC_MOTOR_H_ */

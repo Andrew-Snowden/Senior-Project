@@ -12,6 +12,7 @@
 #include "stm32f303xe.h"
 
 volatile extern int16_t rotary_position;
+volatile extern int16_t previous_rotary_position;
 
 void RotaryEncoderInit();
 

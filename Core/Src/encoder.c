@@ -2,6 +2,7 @@
 #include "myprint.h"
 
 volatile int16_t rotary_position;
+volatile int16_t previous_rotary_position;
 
 void RotaryEncoderInit()
 {

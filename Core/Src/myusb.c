@@ -153,7 +153,7 @@ void DescriptorInitialization(void)
 	device.descriptor.bDeviceProtocol = 0x00;
 	device.descriptor.bMaxPacketSize0 = 64;
 	device.descriptor.idVendor = 0x045e;	//03ED
-	device.descriptor.idProduct = 0x001b;	//2FF4
+	device.descriptor.idProduct = 0x007D;	//2FF4
 	device.descriptor.bcdDevice = 0x0100;
 	device.descriptor.iManufacturer = 0x00;
 	device.descriptor.iProduct = 0x00;
@@ -192,7 +192,7 @@ void DescriptorInitialization(void)
 	hid.descriptor.bCountryCode = 0x00;
 	hid.descriptor.bNumDescriptors = 0x01;
 	hid.descriptor.bDescriptorTypeReport = 0x22;
-	hid.descriptor.wDescriptorLength = 1274;
+	hid.descriptor.wDescriptorLength = 117;
 }
 
 /*-----------------------------------*/
@@ -225,7 +225,7 @@ void ReadEndpoint(uint8_t endpoint, uint8_t num_bytes)
 void WriteEndpoint(uint8_t endpoint, uint16_t* data_buffer, uint8_t num_bytes)
 {
 	//Get offset to endpoint n TX buffer
-	uint16_t offset = *(volatile uint16_t*)((endpoint*8) + 0x40006000);
+	uint16_t offset = *(uint16_t*)((endpoint*8) + 0x40006000);
 
 	//Point to TX buffer
 	volatile uint16_t* location = ((uint16_t*)(0x40006000 + offset));
@@ -435,7 +435,7 @@ void EndpointCallback(void)
 			}
 			else //IN
 			{
-				WriteEndpoint(1, report.data, 10);
+				WriteEndpoint(1, report.data, 14);
 				USBz->EP1R = ((~USB_EP_CTR_TX) & USBz->EP1R) & 0x8F8F;
 			}
 
